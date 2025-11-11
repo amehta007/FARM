@@ -1,0 +1,35 @@
+video:
+  source: "data/raw/sample.mp4"   # or "webcam:0"
+  fps_override: null
+  skip_frames: 2  # Process every Nth frame for speed
+
+model:
+  path: "models/weights/yolov8n.onnx"
+  conf_threshold: 0.25
+  iou_threshold: 0.45
+  input_size: [640, 640]
+
+tracking:
+  type: "bytetrack"
+  track_thresh: 0.5
+  track_buffer: 30
+  match_thresh: 0.8
+  min_box_area: 10
+
+zones:
+  - name: "Row A"
+    points: [[50, 50], [600, 50], [600, 300], [50, 300]]
+  - name: "Row B"
+    points: [[50, 320], [600, 320], [600, 600], [50, 600]]
+
+metrics:
+  idle_speed_px_s: 8.0
+  heatmap_grid: [48, 27]  # [width_cells, height_cells]
+  min_track_frames: 10  # Minimum frames to consider valid track
+
+output:
+  dir: "data/outputs"
+  save_annotated: true
+  save_per_frame: true
+  blur_faces: false
+
