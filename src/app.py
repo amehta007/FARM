@@ -1,6 +1,7 @@
 """Streamlit dashboard for worker monitoring system."""
 
 import glob
+import shutil
 from pathlib import Path
 
 import cv2
@@ -57,6 +58,47 @@ def load_latest_run(output_dir: str = "data/outputs"):
     return data
 
 
+def clear_run_outputs(output_dir: str, raw_dir: str = "data/raw") -> dict:
+    """
+    Remove generated output artifacts and temporary webcam recordings.
+
+    Args:
+        output_dir: Directory containing run outputs (metrics, annotated videos, etc.)
+        raw_dir: Directory containing raw input videos (only webcam_* files will be removed)
+
+    Returns:
+        Dictionary describing the removed files.
+    """
+    removed_outputs = []
+    removed_webcam = []
+
+    output_path = Path(output_dir)
+    if output_path.exists():
+        for item in output_path.iterdir():
+            try:
+                if item.is_file() or item.is_symlink():
+                    item.unlink()
+                else:
+                    shutil.rmtree(item)
+                removed_outputs.append(item.name)
+            except Exception as exc:  # pragma: no cover - safety net for rare filesystem errors
+                removed_outputs.append(f"{item.name} (failed: {exc})")
+
+    raw_path = Path(raw_dir)
+    if raw_path.exists():
+        for webcam_file in raw_path.glob("webcam_*.mp4"):
+            try:
+                webcam_file.unlink()
+                removed_webcam.append(webcam_file.name)
+            except Exception as exc:  # pragma: no cover
+                removed_webcam.append(f"{webcam_file.name} (failed: {exc})")
+
+    return {
+        "outputs": removed_outputs,
+        "webcam": removed_webcam,
+    }
+
+
 def main():
     """Main dashboard application."""
     
@@ -67,10 +109,22 @@ def main():
     # Sidebar
     with st.sidebar:
         st.header("⚙️ Settings")
+        if "cleanup_result" in st.session_state:
+            cleanup_result = st.session_state.pop("cleanup_result")
+            outputs_count = len([name for name in cleanup_result["outputs"] if "failed" not in name])
+            webcam_count = len([name for name in cleanup_result["webcam"] if "failed" not in name])
+            st.success(
+                f"Cleared {outputs_count} output file(s) "
+                f"and {webcam_count} webcam recording(s)."
+            )
         
         output_dir = st.text_input("Output Directory", value="data/outputs")
         
         if st.button("🔄 Refresh Data"):
+            st.rerun()
+        if st.button("🧹 Clear logs & videos"):
+            cleanup_result = clear_run_outputs(output_dir)
+            st.session_state["cleanup_result"] = cleanup_result
             st.rerun()
         
         st.markdown("---")
