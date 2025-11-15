@@ -40,7 +40,8 @@ def draw_bbox(
     track_id: int,
     score: float,
     label: Optional[str] = None,
-    thickness: int = 2
+    thickness: int = 2,
+    is_active: Optional[bool] = None
 ) -> np.ndarray:
     """
     Draw bounding box with label.
@@ -52,12 +53,25 @@ def draw_bbox(
         score: Confidence score
         label: Optional label text
         thickness: Line thickness
+        is_active: If True, draw green box (active). If False, draw red box (idle). 
+                   If None, use track_id-based color.
     
     Returns:
         Frame with drawing
     """
     x1, y1, x2, y2 = map(int, bbox[:4])
-    color = get_color(track_id)
+    
+    # Determine color based on active/idle status
+    if is_active is not None:
+        if is_active:
+            color = (0, 255, 0)  # Green for active (BGR format)
+            status_text = "ACTIVE"
+        else:
+            color = (0, 0, 255)  # Red for idle (BGR format)
+            status_text = "IDLE"
+    else:
+        color = get_color(track_id)
+        status_text = None
     
     # Draw box
     cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness)
@@ -65,6 +79,8 @@ def draw_bbox(
     # Prepare label
     if label is None:
         label = f"ID:{track_id} {score:.2f}"
+        if status_text:
+            label = f"{status_text} | {label}"
     
     # Draw label background
     (label_w, label_h), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)

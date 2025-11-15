@@ -5,27 +5,26 @@ video:
 
 model:
   path: "models/weights/yolov8n.onnx"
-  conf_threshold: 0.25
-  iou_threshold: 0.45
+  conf_threshold: 0.45  # Increased from 0.25 to reduce false positives
+  iou_threshold: 0.35  # Lowered from 0.45 for more aggressive NMS filtering
   input_size: [640, 640]
 
 tracking:
   type: "bytetrack"
-  track_thresh: 0.5
+  track_thresh: 0.6  # Increased from 0.5 to only track high-confidence detections
   track_buffer: 30
   match_thresh: 0.8
-  min_box_area: 10
+  min_box_area: 100  # Increased from 10 to filter out very small detections
+  min_track_hits: 8  # Require 8 detections before showing track (reduces flicker and duplicates)
+  duplicate_iou_thresh: 0.5  # Lowered from 0.65 - more aggressive duplicate detection
 
-zones:
-  - name: "Row A"
-    points: [[50, 50], [600, 50], [600, 300], [50, 300]]
-  - name: "Row B"
-    points: [[50, 320], [600, 320], [600, 600], [50, 600]]
+zones: []  # No zones defined - entire field is treated as one area
 
 metrics:
   idle_speed_px_s: 8.0
   heatmap_grid: [48, 27]  # [width_cells, height_cells]
   min_track_frames: 10  # Minimum frames to consider valid track
+  smoothing_window: 15  # Number of frames to smooth active/idle status (reduces flickering)
 
 output:
   dir: "data/outputs"

@@ -74,7 +74,9 @@ def process(
             track_thresh=cfg.tracking.track_thresh,
             track_buffer=cfg.tracking.track_buffer,
             match_thresh=cfg.tracking.match_thresh,
-            min_box_area=cfg.tracking.min_box_area
+            min_box_area=cfg.tracking.min_box_area,
+            min_track_hits=cfg.tracking.min_track_hits,
+            duplicate_iou_thresh=cfg.tracking.duplicate_iou_thresh
         )
         
         console.print("[yellow]Opening video source...[/yellow]")
@@ -86,7 +88,8 @@ def process(
         # Initialize analytics
         metrics_tracker = MetricsTracker(
             idle_speed_threshold=cfg.metrics.idle_speed_px_s,
-            fps=fps
+            fps=fps,
+            smoothing_window=cfg.metrics.smoothing_window
         )
         
         zone_manager = ZoneManager([z.model_dump() for z in cfg.zones])
@@ -166,12 +169,15 @@ def process(
                     bbox = track[:4]
                     score = track[5]
                     
+                    # Get active/idle status for visualization
+                    is_active = metrics_tracker.is_track_active(track_id)
+                    
                     # Blur faces if enabled
                     if cfg.output.blur_faces:
                         vis_frame = blur_bbox(vis_frame, bbox, kernel_size=31)
                     
-                    # Draw bounding box
-                    vis_frame = draw_bbox(vis_frame, bbox, track_id, score)
+                    # Draw bounding box with active/idle color coding
+                    vis_frame = draw_bbox(vis_frame, bbox, track_id, score, is_active=is_active)
                 
                 # Draw info panel
                 current_fps = fps_counter.tick()

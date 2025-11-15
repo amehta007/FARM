@@ -29,6 +29,8 @@ class TrackingConfig(BaseModel):
     track_buffer: int = 30
     match_thresh: float = 0.8
     min_box_area: float = 10.0
+    min_track_hits: int = 3
+    duplicate_iou_thresh: float = 0.7
 
 
 class Zone(BaseModel):
@@ -42,6 +44,7 @@ class MetricsConfig(BaseModel):
     idle_speed_px_s: float = 8.0
     heatmap_grid: List[int] = Field(default=[48, 27])
     min_track_frames: int = 10
+    smoothing_window: int = 15  # Number of frames to smooth active/idle status (reduces flickering)
 
 
 class OutputConfig(BaseModel):
