@@ -174,23 +174,61 @@ def main():
         
         summary_df = data["summary"]
         
+        # Handle backward compatibility: rename old column name if it exists
+        if "active_ratio" in summary_df.columns and "Productivity_measure" not in summary_df.columns:
+            summary_df = summary_df.rename(columns={"active_ratio": "Productivity_measure"})
+        
+        # Calculate video duration from history if available
+        video_duration = None
+        if "history" in data and not data["history"].empty:
+            history_df = data["history"]
+            max_timestamp = history_df["timestamp"].max()
+            min_timestamp = history_df["timestamp"].min()
+            # Estimate FPS from frame indices
+            max_frame = history_df["frame_idx"].max()
+            if max_frame > 0 and max_timestamp > 0:
+                estimated_fps = max_frame / max_timestamp
+                video_duration = max_timestamp + (1.0 / estimated_fps)  # Add one frame duration
+            else:
+                video_duration = max_timestamp
+        
         # KPIs
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4, col5 = st.columns(5)
         
         with col1:
             st.metric("Total Workers", len(summary_df))
         
         with col2:
-            avg_active = summary_df["active_ratio"].mean() * 100 if not summary_df.empty else 0
-            st.metric("Avg Active %", f"{avg_active:.1f}%")
+            # Use Productivity_measure if available, otherwise calculate from active/presence times
+            if "Productivity_measure" in summary_df.columns:
+                avg_active = summary_df["Productivity_measure"].mean() * 100 if not summary_df.empty else 0
+            elif "active_time_s" in summary_df.columns and "presence_time_s" in summary_df.columns:
+                # Calculate productivity measure from active and presence times
+                productivity = summary_df["active_time_s"] / summary_df["presence_time_s"]
+                avg_active = productivity.mean() * 100 if not summary_df.empty else 0
+            else:
+                avg_active = 0
+            st.metric("Avg Productivity", f"{avg_active:.1f}%")
         
         with col3:
-            total_presence = summary_df["presence_time_s"].sum() if not summary_df.empty else 0
-            st.metric("Total Presence", f"{total_presence:.1f}s")
+            if video_duration is not None:
+                st.metric("Video Duration", f"{video_duration:.1f}s")
+            else:
+                st.metric("Video Duration", "N/A")
         
         with col4:
+            total_worker_seconds = summary_df["presence_time_s"].sum() if not summary_df.empty else 0
+            st.metric("Total Worker-Seconds", f"{total_worker_seconds:.1f}s")
+        
+        with col5:
             total_idle = summary_df["idle_time_s"].sum() if not summary_df.empty else 0
             st.metric("Total Idle Time", f"{total_idle:.1f}s")
+        
+        # Explanation of metrics
+        if video_duration is not None and not summary_df.empty:
+            st.info(f"💡 **Note:** Video Duration ({video_duration:.1f}s) is the actual video length. "
+                   f"Total Worker-Seconds ({total_worker_seconds:.1f}s) is the sum of all individual worker presence times. "
+                   f"If multiple workers are present simultaneously, their times are added together.")
         
         st.markdown("---")
         
@@ -200,7 +238,17 @@ def main():
         if not summary_df.empty:
             # Format for display
             display_df = summary_df.copy()
-            display_df["active_ratio"] = display_df["active_ratio"].apply(lambda x: f"{x*100:.1f}%")
+            # Handle Productivity_measure column (with backward compatibility)
+            if "Productivity_measure" in display_df.columns:
+                display_df["Productivity_measure"] = display_df["Productivity_measure"].apply(lambda x: f"{x*100:.1f}%")
+            elif "active_ratio" in display_df.columns:
+                # Rename and format old column
+                display_df = display_df.rename(columns={"active_ratio": "Productivity_measure"})
+                display_df["Productivity_measure"] = display_df["Productivity_measure"].apply(lambda x: f"{x*100:.1f}%")
+            elif "active_time_s" in display_df.columns and "presence_time_s" in display_df.columns:
+                # Calculate if not present
+                display_df["Productivity_measure"] = (display_df["active_time_s"] / display_df["presence_time_s"]).apply(lambda x: f"{x*100:.1f}%")
+            
             display_df["presence_time_s"] = display_df["presence_time_s"].apply(lambda x: f"{x:.1f}s")
             display_df["active_time_s"] = display_df["active_time_s"].apply(lambda x: f"{x:.1f}s")
             display_df["idle_time_s"] = display_df["idle_time_s"].apply(lambda x: f"{x:.1f}s")

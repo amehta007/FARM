@@ -152,7 +152,7 @@ class TrackMetrics:
             "presence_time_s": presence_time,
             "active_time_s": active_time,
             "idle_time_s": idle_time,
-            "active_ratio": active_time / presence_time if presence_time > 0 else 0,
+            "Productivity_measure": active_time / presence_time if presence_time > 0 else 0,
         }
     
     def get_history_df(self) -> pd.DataFrame:

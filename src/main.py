@@ -121,9 +121,95 @@ def process(
         fps_counter = FPSCounter()
         frame_count = 0
         
-        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}")) as progress:
-            task = progress.add_task("[cyan]Processing frames...", total=None)
-            
+        # Use simple progress without Unicode spinner for Windows compatibility
+        try:
+            with Progress(TextColumn("[progress.description]{task.description}")) as progress:
+                task = progress.add_task("Processing frames...", total=None)
+                
+                while True:
+                    ret, frame = video_reader.read()
+                    if not ret:
+                        break
+                    
+                    frame_idx = video_reader.get_current_frame_idx()
+                    timestamp = frame_idx / fps
+                    
+                    # Detection (skip frames for speed)
+                    if frame_idx % cfg.video.skip_frames == 0:
+                        detections = detector.detect(frame)
+                    else:
+                        detections = np.empty((0, 5))
+                    
+                    # Tracking
+                    tracks = tracker.update(detections)
+                    
+                    # Process each track
+                    for track in tracks:
+                        track_id = int(track[4])
+                        bbox = track[:4]
+                        score = track[5]
+                        
+                        # Update metrics
+                        metrics_tracker.update(track_id, bbox, timestamp, frame_idx)
+                        
+                        # Update zones
+                        center = bbox_center(bbox)
+                        zone_manager.update(track_id, center, 1.0 / fps)
+                        
+                        # Update heatmap
+                        heatmap.update(center, 1.0 / fps)
+                    
+                    # Visualization
+                    vis_frame = frame.copy()
+                    
+                    # Draw zones
+                    vis_frame = draw_zones(vis_frame, zone_manager.zones, alpha=0.2)
+                    
+                    # Draw tracks
+                    for track in tracks:
+                        track_id = int(track[4])
+                        bbox = track[:4]
+                        score = track[5]
+                        
+                        # Get active/idle status for visualization
+                        is_active = metrics_tracker.is_track_active(track_id)
+                        
+                        # Blur faces if enabled
+                        if cfg.output.blur_faces:
+                            vis_frame = blur_bbox(vis_frame, bbox, kernel_size=31)
+                        
+                        # Draw bounding box with active/idle color coding
+                        vis_frame = draw_bbox(vis_frame, bbox, track_id, score, is_active=is_active)
+                    
+                    # Draw info panel
+                    current_fps = fps_counter.tick()
+                    info = {
+                        "Frame": f"{frame_idx}",
+                        "FPS": f"{current_fps:.1f}" if current_fps else "N/A",
+                        "Workers": len(tracks),
+                        "Tracks": len(metrics_tracker.tracks)
+                    }
+                    vis_frame = draw_info_panel(vis_frame, info, position="top-right")
+                    
+                    # Display
+                    if display:
+                        cv2.imshow("Worker Detection", vis_frame)
+                        if cv2.waitKey(1) & 0xFF == ord('q'):
+                            logger.info("User requested quit")
+                            break
+                    
+                    # Write annotated video
+                    if video_writer is not None:
+                        video_writer.write(vis_frame)
+                    
+                    frame_count += 1
+                    
+                    if frame_count % 100 == 0:
+                        logger.info(f"Processed {frame_count} frames...")
+                        progress.update(task, description=f"Processed {frame_count} frames...")
+        except UnicodeEncodeError:
+            # Fallback for Windows console encoding issues
+            logger.info("Processing frames (progress display disabled for Windows compatibility)...")
             while True:
                 ret, frame = video_reader.read()
                 if not ret:
@@ -203,7 +289,7 @@ def process(
                 frame_count += 1
                 
                 if frame_count % 100 == 0:
-                    progress.update(task, description=f"[cyan]Processed {frame_count} frames...")
+                    logger.info(f"Processed {frame_count} frames...")
         
         # Cleanup
         video_reader.release()
@@ -242,7 +328,7 @@ def process(
         console.print(f"Total frames processed: {frame_count}")
         
         if not summary_df.empty:
-            console.print(f"Average active ratio: {summary_df['active_ratio'].mean():.2%}")
+            console.print(f"Average productivity measure: {summary_df['Productivity_measure'].mean():.2%}")
             console.print(f"Total worker-seconds: {summary_df['presence_time_s'].sum():.1f}s")
         
         console.print(f"\n[bold green]Results saved to: {cfg.output.dir}/[/bold green]")
